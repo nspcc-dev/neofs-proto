@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/nspcc-dev/neofs-api-go/pkg/container"
 	"github.com/nspcc-dev/neofs-api-go/pkg/object"
@@ -218,6 +219,10 @@ func (p *PutObjectParams) PayloadReader() io.Reader {
 	return nil
 }
 
+var chunksPool = sync.Pool{
+	New: func() interface{} { return make([]byte, chunkSize) },
+}
+
 func (c *clientImpl) PutObject(ctx context.Context, p *PutObjectParams, opts ...CallOption) (*object.ID, error) {
 	callOpts := c.defaultCallOptions()
 
@@ -299,8 +304,10 @@ func (c *clientImpl) PutObject(ctx context.Context, p *PutObjectParams, opts ...
 
 	r := &putObjectV2Reader{r: rPayload}
 
-	// copy payload from reader to stream writer
-	_, err = io.CopyBuffer(w, r, make([]byte, chunkSize))
+	// copy payload from to stream writer
+	ch := chunksPool.Get().([]byte)
+	defer chunksPool.Put(ch)
+	_, err = io.CopyBuffer(w, r, ch)
 	if err != nil && !errors.Is(errors.Cause(err), io.EOF) {
 		return nil, errors.Wrap(err, "payload streaming failed")
 	}
@@ -312,7 +319,7 @@ func (c *clientImpl) PutObject(ctx context.Context, p *PutObjectParams, opts ...
 	}
 
 	// verify response structure
-	if err := signature.VerifyServiceMessage(resp); err != nil {
+	if err := signature.VerifyServiceMessage(resp, callOpts.signOpts()...); err != nil {
 		return nil, errors.Wrap(err, "response verification failed")
 	}
 
@@ -416,7 +423,7 @@ func (c *clientImpl) DeleteObject(ctx context.Context, p *DeleteObjectParams, op
 	}
 
 	// verify response structure
-	if err := signature.VerifyServiceMessage(resp); err != nil {
+	if err := signature.VerifyServiceMessage(resp, callOpts.signOpts()...); err != nil {
 		return errors.Wrap(err, "response verification failed")
 	}
 
@@ -543,7 +550,7 @@ func (c *clientImpl) GetObject(ctx context.Context, p *GetObjectParams, opts ...
 		}
 
 		// verify response structure
-		if err := signature.VerifyServiceMessage(resp); err != nil {
+		if err := signature.VerifyServiceMessage(resp, callOpts.signOpts()...); err != nil {
 			return nil, errors.Wrap(err, "response verification failed")
 		}
 
@@ -693,7 +700,7 @@ func (c *clientImpl) GetObjectHeader(ctx context.Context, p *ObjectHeaderParams,
 	}
 
 	// verify response structure
-	if err := signature.VerifyServiceMessage(resp); err != nil {
+	if err := signature.VerifyServiceMessage(resp, callOpts.signOpts()...); err != nil {
 		return nil, errors.Wrap(err, "response verification failed")
 	}
 
@@ -737,13 +744,12 @@ func (c *clientImpl) GetObjectHeader(ctx context.Context, p *ObjectHeaderParams,
 		hdr = hdrWithSig.GetHeader()
 		idSig = hdrWithSig.GetSignature()
 
-		if err := signer.VerifyDataWithSource(
+		if err := signer.VerifyData(
 			signature.StableMarshalerWrapper{
 				SM: p.addr.ObjectID().ToV2(),
 			},
-			func() (key, sig []byte) {
-				return idSig.GetKey(), idSig.GetSign()
-			},
+			idSig.GetKey(),
+			idSig.GetSign(),
 		); err != nil {
 			return nil, errors.Wrap(err, "incorrect object header signature")
 		}
@@ -891,7 +897,7 @@ func (c *clientImpl) ObjectPayloadRangeData(ctx context.Context, p *RangeDataPar
 		}
 
 		// verify response structure
-		if err := signature.VerifyServiceMessage(resp); err != nil {
+		if err := signature.VerifyServiceMessage(resp, callOpts.signOpts()...); err != nil {
 			return nil, errors.Wrapf(err, "could not verify %T", resp)
 		}
 
@@ -1040,7 +1046,7 @@ func (c *clientImpl) objectPayloadRangeHash(ctx context.Context, p *RangeChecksu
 	}
 
 	// verify response structure
-	if err := signature.VerifyServiceMessage(resp); err != nil {
+	if err := signature.VerifyServiceMessage(resp, callOpts.signOpts()...); err != nil {
 		return nil, errors.Wrap(err, "response verification failed")
 	}
 
@@ -1188,7 +1194,7 @@ func (c *clientImpl) SearchObject(ctx context.Context, p *SearchObjectParams, op
 		}
 
 		// verify response structure
-		if err := signature.VerifyServiceMessage(resp); err != nil {
+		if err := signature.VerifyServiceMessage(resp, callOpts.signOpts()...); err != nil {
 			return nil, errors.Wrapf(err, "could not verify %T", resp)
 		}
 

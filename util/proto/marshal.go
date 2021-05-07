@@ -236,12 +236,17 @@ func RepeatedInt64Size(field int, v []int64) (size, arraySize int) {
 		return 0, 0
 	}
 
-	convert := make([]uint64, len(v))
 	for i := range v {
-		convert[i] = uint64(v[i])
+		size += VarUIntSize(uint64(v[i]))
 	}
+	arraySize = size
 
-	return RepeatedUInt64Size(field, convert)
+	size += VarUIntSize(uint64(size))
+
+	prefix := field<<3 | 0x2
+	size += VarUIntSize(uint64(prefix))
+
+	return size, arraySize
 }
 
 func RepeatedUInt32Marshal(field int, buf []byte, v []uint32) (int, error) {
@@ -262,12 +267,17 @@ func RepeatedUInt32Size(field int, v []uint32) (size, arraySize int) {
 		return 0, 0
 	}
 
-	convert := make([]uint64, len(v))
 	for i := range v {
-		convert[i] = uint64(v[i])
+		size += VarUIntSize(uint64(v[i]))
 	}
+	arraySize = size
 
-	return RepeatedUInt64Size(field, convert)
+	size += VarUIntSize(uint64(size))
+
+	prefix := field<<3 | 0x2
+	size += VarUIntSize(uint64(prefix))
+
+	return size, arraySize
 }
 
 func RepeatedInt32Marshal(field int, buf []byte, v []int32) (int, error) {
@@ -288,12 +298,17 @@ func RepeatedInt32Size(field int, v []int32) (size, arraySize int) {
 		return 0, 0
 	}
 
-	convert := make([]uint64, len(v))
 	for i := range v {
-		convert[i] = uint64(v[i])
+		size += VarUIntSize(uint64(v[i]))
 	}
+	arraySize = size
 
-	return RepeatedUInt64Size(field, convert)
+	size += VarUIntSize(uint64(size))
+
+	prefix := field<<3 | 0x2
+	size += VarUIntSize(uint64(prefix))
+
+	return size, arraySize
 }
 
 // varUIntSize returns length of varint byte sequence for uint64 value 'x'.

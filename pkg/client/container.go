@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"io"
 
 	"github.com/nspcc-dev/neofs-api-go/pkg"
 	"github.com/nspcc-dev/neofs-api-go/pkg/acl/eacl"
@@ -51,8 +52,8 @@ type EACLWithSignature struct {
 	sig *pkg.Signature
 }
 
-func (c delContainerSignWrapper) ReadSignedData(bytes []byte) ([]byte, error) {
-	return c.body.GetContainerID().GetValue(), nil
+func (c delContainerSignWrapper) WriteSignedDataTo(w io.Writer) (int, error) {
+	return w.Write(c.body.GetContainerID().GetValue())
 }
 
 func (c delContainerSignWrapper) SignedDataSize() int {
@@ -123,7 +124,7 @@ func (c *clientImpl) PutContainer(ctx context.Context, cnr *container.Container,
 		return nil, err
 	}
 
-	err = v2signature.VerifyServiceMessage(resp)
+	err = v2signature.VerifyServiceMessage(resp, callOptions.signOpts()...)
 	if err != nil {
 		return nil, errors.Wrap(err, "can't verify response message")
 	}
@@ -159,7 +160,7 @@ func (c *clientImpl) GetContainer(ctx context.Context, id *container.ID, opts ..
 		return nil, errors.Wrap(err, "transport error")
 	}
 
-	err = v2signature.VerifyServiceMessage(resp)
+	err = v2signature.VerifyServiceMessage(resp, callOptions.signOpts()...)
 	if err != nil {
 		return nil, errors.Wrap(err, "can't verify response message")
 	}
@@ -219,7 +220,7 @@ func (c *clientImpl) ListContainers(ctx context.Context, ownerID *owner.ID, opts
 		return nil, errors.Wrap(err, "transport error")
 	}
 
-	err = v2signature.VerifyServiceMessage(resp)
+	err = v2signature.VerifyServiceMessage(resp, callOptions.signOpts()...)
 	if err != nil {
 		return nil, errors.Wrap(err, "can't verify response message")
 	}
@@ -273,7 +274,8 @@ func (c *clientImpl) DeleteContainer(ctx context.Context, id *container.ID, opts
 		return errors.Wrap(err, "transport error")
 	}
 
-	return errors.Wrap(v2signature.VerifyServiceMessage(resp), "can't verify response message")
+	return errors.Wrap(v2signature.VerifyServiceMessage(resp, callOptions.signOpts()...),
+		"can't verify response message")
 }
 
 func (c *clientImpl) GetEACL(ctx context.Context, id *container.ID, opts ...CallOption) (*EACLWithSignature, error) {
@@ -301,7 +303,7 @@ func (c *clientImpl) GetEACL(ctx context.Context, id *container.ID, opts ...Call
 		return nil, errors.Wrap(err, "transport error")
 	}
 
-	err = v2signature.VerifyServiceMessage(resp)
+	err = v2signature.VerifyServiceMessage(resp, callOptions.signOpts()...)
 	if err != nil {
 		return nil, errors.Wrap(err, "can't verify response message")
 	}
@@ -352,7 +354,7 @@ func (c *clientImpl) SetEACL(ctx context.Context, eacl *eacl.Table, opts ...Call
 		return errors.Wrap(err, "transport error")
 	}
 
-	err = v2signature.VerifyServiceMessage(resp)
+	err = v2signature.VerifyServiceMessage(resp, callOptions.signOpts()...)
 	if err != nil {
 		return errors.Wrap(err, "can't verify response message")
 	}
@@ -397,7 +399,7 @@ func (c *clientImpl) AnnounceContainerUsedSpace(
 		return errors.Wrap(err, "transport error")
 	}
 
-	err = v2signature.VerifyServiceMessage(resp)
+	err = v2signature.VerifyServiceMessage(resp, callOptions.signOpts()...)
 	if err != nil {
 		return errors.Wrap(err, "can't verify response message")
 	}
